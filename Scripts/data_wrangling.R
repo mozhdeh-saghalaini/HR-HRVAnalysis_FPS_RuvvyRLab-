@@ -37,7 +37,7 @@ read_mindware_files <- function(filename) {
     task_version <- participant_data[5]    # "1" or "2"
     collection_date <- participant_data[6] %>% lubridate::mdy() # such as "09072021" and then to "2021-09-07"
     
-    #### Determining Row Numbers ####
+    #### Determining row numbers ####
     
     # I set this based on the zoom recording of our meeting but should be checked and adjusted if needed. 
     metric_rows <- list(
@@ -189,7 +189,5 @@ if(nrow(hrv_final) > 0) {
 } else {
   cat("\n No data processed! \n")
 }
-
-
 
 
