@@ -64,6 +64,57 @@ def type_text(text, delay=0.1):
     """Types text safely with a small delay between keystrokes."""
     pyautogui.write(text, interval=delay)
 
+
+def segment_has_yellow_peaks(region=(403, 274, 700, 128), threshold=0.0001):
+    """
+    Checks if the ECG graph contains yellow R-peaks.
+    Returns True if yellow pixels are detected above threshold.
+    """
+    time.sleep(1)  # allow UI to settle
+    screenshot_path = "ecg_segment.png"
+    pyautogui.screenshot(screenshot_path, region=region)
+    img = Image.open(screenshot_path).convert("RGB")
+
+    yellow_count = 0
+    total_pixels = img.width * img.height
+
+    for r, g, b in img.getdata():
+        # broader definition of yellow
+        if r > 180 and g > 180 and b < 100:  # stricter yellow
+            yellow_count += 1
+
+
+    yellow_ratio = yellow_count / total_pixels
+    print(f"Yellow pixel ratio: {yellow_ratio:.6f}")
+    return yellow_ratio > threshold
+
+
+def check_all_segments(max_segments=8):
+    """
+    Loops through each segment and checks for yellow peaks.
+    If yellow peaks are detected, clicks 'Edit R’s' and waits
+    for user to press Enter before continuing.
+    """
+    for i in range(max_segments):
+        print(f"\nChecking segment {i+1}...")
+
+        if segment_has_yellow_peaks():
+            print("Yellow peaks detected. Clicking 'Edit R’s'...")
+            wait_and_click("edit_rs_button.png")
+            time.sleep(2)
+
+            # Pause here until you confirm you're done
+            input(">>> Fix R-peaks manually, close the Edit window, then press Enter to continue...")
+
+        else:
+            print("Segment is clean. No action needed.")
+
+        # Move to next segment
+        pyautogui.click(x=458, y=206)  
+        time.sleep(3)
+
+
+
 # ------------------------------------------------------------
 # Step 1: Launch MindWare HRV software
 # ------------------------------------------------------------
@@ -191,3 +242,34 @@ time.sleep(5)
 # ------------------------------------------------------------
 wait_and_click("analyze_button.png")
 print("Analysis started successfully")
+
+# ------------------------------------------------------------
+# Step 9: Post-analysis segment check
+# ------------------------------------------------------------
+time.sleep(10)  # give the first segment time to fully render
+check_all_segments()
+
+
+# ------------------------------------------------------------
+# Step 10: Export results
+# ------------------------------------------------------------
+print("\nAll segments checked. Exporting results...")
+
+# Trigger Write All Segments via keyboard shortcut
+pyautogui.hotkey('ctrl', 'shift', 'w')
+time.sleep(6)
+
+# # In the pop-up, select folder
+# wait_and_click("export_folder_field.png")
+# type_text(r"C:\Users\user\Downloads\ECG-60-Hz-Noise")
+pyautogui.press('enter')
+time.sleep(1)
+
+
+# Press OK
+pyautogui.press('enter')
+time.sleep(2)
+
+print("Export complete. Workflow finished.")
+
+
