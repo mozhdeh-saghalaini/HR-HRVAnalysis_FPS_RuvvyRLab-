@@ -1,6 +1,11 @@
 ##### Last Update: 11/16/2025 ####
 # Authored by Mozhdeh Saghalaini: m.saghalaini@gmail.com
 
+
+## warning: the current output will allocate separate rows for EXT and ACQ of the same partcipant
+## - consult this with Dr. Grasser, whether it's better to combine EXT/ACQ files of the same 
+## participant in one row or this version is fine
+
 # Some of the notes are for double checking and some are for me to remmeber stuff
 # This code integrats data wrangling, cleaning, and merging
 # It processes the raw MindWare files and merges them with subjective questionnaire data 
@@ -14,7 +19,7 @@
 # 3. Data_Codebook.csv - Documentation of all variables and their meanings
 
 # This code handles multiple participants and segments,
-# -includes robust data quality checks (outliers, missing data, physiological plausibility),
+# includes robust data quality checks (outliers, missing data, physiological plausibility),
 
 ##### Loading Packages #####
 
@@ -25,15 +30,18 @@ library(stringr)   # String manipulation
 library(lubridate) # Data handling
 library(janitor)   # data cleaning process
 library(robust)    # Robust outlier detection
+library(naniar)    # For missing data visualization
+library(mice)      # For multiple imputation
+library(finalfit)  # For missing data tests
 
 
-#### Function: Reading Mindware Files#### 
+#### Function: Reading Mindware Files #### 
 
 read_mindware_files <- function(filename) {
   tryCatch({
     
     #### Sheet Selection ####
-    segment_sheet_name <- "HRV Stats" # This might need some adjustments
+    segment_sheet_name <- "HRV Stats" 
     
     # Read the specified sheet
     d <- read_excel(filename, sheet = segment_sheet_name)
@@ -60,34 +68,21 @@ read_mindware_files <- function(filename) {
     
     
     #### Determining row numbers ####
-    # I set these based on the zoom recording of our meeting but these should be checked and adjusted if needed. 
+    # adjusted based on an actual MindWare output (11/28/2025)
     
     metric_rows <- list(
       
-      # Segments' info
-      start_number = 1,        
-      start_event = 2,
-      start_time = 3,
-      end_event = 4,         
-      end_time = 5,           
-      segment_duration = 6,  
+      segment_duration = 9,
+
+      mean_hr = 56,            
+      # mean_ibi = 59,           
+      # n_rs_found = 60,      
       
-      # Mean metrics
-      mean_hr = 9,            
-      mean_ibi = 11,           
-      n_rs_found = 12,      
-      
-      # ECG timing
-      first_ecg_r = 17,       
-      last_ecg_r = 18,       
-      # first_r_to_l= ?, # not quite sure what is this
-      
-      # Time Domain metrics
-      sdnn = 20,              
-      avnn = 21,             
-      rmssd = 22,             
-      nn50 = 23,              
-      pnn50 = 24             
+      sdnn = 65,             
+      rmssd = 67
+      # avnn = 67,
+      # nn50 = 69,              
+      # pnn50 = 70             
     )
     
     # Number of segments 
@@ -118,18 +113,24 @@ read_mindware_files <- function(filename) {
       
       row_num <- metric_rows[[metric_name]]
       
-      # Extracting values of segments
-      metric_values <- tryCatch({as.numeric(d[row_num, 2:ncol(d)])}, 
-                                error = function(e) {values <- as.character(d[row_num, 2:ncol(d)]) # suitable for strings like "NA"
-        
-                                sapply(values, function(x) {
-                                  if(x == "N/A") return(NA)
-                                  if(grepl("^-?\\d+\\.?\\d*$", x)) return(as.numeric(x))
-                                  return(NA)
-                                })
-      })
+      all_values <- as.character(d[row_num, 2:ncol(d)])
+      non_na_values <- which(!is.na(all_values) & all_values != "" & all_values != "N/A")
       
-      # Adding each segment's value as a separate colunm
+      if(length(non_na_values) > 0) {
+        last_real_segment <- max(non_na_values)
+        metric_values <- all_values[1:last_real_segment]
+      } else {
+        metric_values <- rep(NA, n_segments)
+      }
+      
+      metric_values <- sapply(metric_values, function(x) {
+        if (is.na(x)) return(NA)
+        if(x == "N/A") return(NA)
+        if(grepl("^-?\\d+\\.?\\d*$", x)) return(as.numeric(x))
+        return(NA)
+      })
+
+      
       for(seg in 1:n_segments) {
         if(length(metric_values) >= seg) {
           col_name <- paste0("seg", seg, "_", metric_name)
@@ -143,20 +144,57 @@ read_mindware_files <- function(filename) {
     
     
     #### Calculating additional summary metrics ####
+    
+    ## Overall means of key metrics
     key_metrics <- c("mean_hr", "rmssd", "sdnn")
     
     for(metric in key_metrics) {
       
-      # Getting segment values for this metric
       segment_cols <- paste0("seg", 1:n_segments, "_", metric)
       values <- sapply(segment_cols, function(col) {
         if(col %in% names(result_data)) result_data[[col]] else NA
       })
       
-      # overall mean and variablinity
       result_data[[paste0("overall_", metric, "_mean")]] <- mean(values, na.rm = TRUE)
       result_data[[paste0("overall_", metric, "_sd")]] <- sd(values, na.rm = TRUE)
     }
+    
+    ## Phasic metrics for the paradigm (late/early EXT/ACQ)
+    all_segment_numbers <- 1:n_segments
+    
+    baseline_segment <- paste0("seg1_", metric)
+    task_segments <- all_segment_numbers[all_segment_numbers > 1]
+    
+    # Early and late phases
+    split_point <- ceiling(length(task_segments) / 2)
+    early_task_segments <- task_segments[1:split_point]
+    late_task_segments <- task_segments[(split_point + 1):length(task_segments)]
+    
+    early_cols <- paste0("seg", early_task_segments, "_", metric)
+    late_cols <- paste0("seg", late_task_segments, "_", metric)
+    all_task_cols <- paste0("seg", task_segments, "_", metric)
+    
+    # Phasic averages
+    result_data[[paste0(metric, "_baseline")]] <- result_data[[baseline_segment]]
+    
+    result_data[[paste0(metric, "_task_early")]] <- rowMeans(
+      result_data[early_cols], na.rm = TRUE
+    )
+    
+    result_data[[paste0(metric, "_task_late")]] <- rowMeans(
+      result_data[late_cols], na.rm = TRUE
+    )
+    
+    # Calculate indices based on Early vs. Late and Early vs. Baseline and Late vs. Baseline
+    result_data[[paste0(metric, "_task_change")]] <- 
+      result_data[[paste0(metric, "_task_late")]] - result_data[[paste0(metric, "_task_early")]]
+    
+    result_data[[paste0(metric, "_reactivity_early")]] <- 
+      result_data[[paste0(metric, "_task_early")]] - result_data[[paste0(metric, "_baseline")]]
+    
+    result_data[[paste0(metric, "_reactivity_late")]] <- 
+      result_data[[paste0(metric, "_task_late")]] - result_data[[paste0(metric, "_baseline")]]
+    
     
     
     #### Data quality checks ####
@@ -312,23 +350,77 @@ analysis_data <- hrv_clean %>%
   )
 
 
-#### Missing data (based on the word file that Dr. Grasser sent me)####
+#### Missing data Handling (Multiple Imputation based on the base code that Dr. Grasser sent me for missing data analysis)####
 
 cat("\n=== Missing Data ===\n")
 
-# Checking missing data patterns
-missing_summary <- analysis_data %>%
-  summarise(across(everything(), ~sum(is.na(.))/n())) %>%
+# Selecting key variables for imputation 
+imputation_vars <- analysis_data %>% 
+  select(id, sex, task_type, age, pds_total,
+         overall_mean_hr_mean, overall_rmssd_mean, overall_sdnn_mean,
+         trauma_exposure, ptsd_total, anxiety_total, hyperarousal_score)
+
+# Checking missingness patterns 
+missing_summary <- imputation_vars %>%
+  summarise(across(everything(), ~sum(is.na(.))/n()*100)) %>%
   pivot_longer(everything(), names_to = "variable", values_to = "pct_missing") %>%
   arrange(desc(pct_missing))
 
 print(missing_summary)
 
-# Applying missing data threshold
-variables_to_keep <- missing_summary %>% filter(pct_missing < 0.20) %>% pull(variable)
-analysis_data_final <- analysis_data %>% select(all_of(variables_to_keep))
+## Testing to see if data is Missing Completely at Random (MCAR)
+# Removing ID column for MCAR test 
+mcar_data <- imputation_vars %>% select(-id)
 
-cat("Remained variables (< 20% missing data):", length(variables_to_keep), "/", ncol(analysis_data), "\n")
+mcar_result <- mcar_test(mcar_data)
+cat("MCAR test p-value:", mcar_result$p.value, "\n")
+
+if(mcar_result$p.value < 0.05) {
+  cat("May not be missing completely at random (p =", round(mcar_result$p.value, 3), ")\n")
+} else {
+  cat("Seems to be missing completely at random (p =", round(mcar_result$p.value, 3), ")\n")
+}
+
+# checking to see if missingness relates to other variables
+explanatory <- c("sex", "age") 
+dependent <- c("overall_rmssd_mean", "ptsd_total", "anxiety_total") 
+
+# Plot
+imputation_vars %>% 
+  missing_pairs(dependent, explanatory)
+
+# Multiple Imputation
+# remove ID, convert factors
+impute_ready <- imputation_vars %>%
+  select(-id) %>%
+  mutate(sex = as.factor(sex),
+         task_type = as.factor(task_type))
+
+imputed_data <- mice(impute_ready, 
+                     m = 5,           # Create 5 imputed datasets
+                     maxit = 10,      # 10 iterations
+                     method = 'pmm',  # Predictive Mean Matching
+                     seed = 123)      # For reproducibility
+
+# Plot to see if imputed values match real data distribution
+densityplot(imputed_data)
+
+# Using the first imputed dataset for your main analysis
+analysis_data_final <- complete(imputed_data, 1) %>% 
+  bind_cols(imputation_vars %>% select(id)) %>% 
+  left_join(analysis_data %>% select(id, collection_date, source_file), by = "id")
+
+
+cat("Final dataset has", nrow(analysis_data_final), "rows.\n")
+
+
+
+
+# # Previous version: simply deleting variables with high % of missingness
+# # Applying missing data threshold
+# variables_to_keep <- missing_summary %>% filter(pct_missing < 0.20) %>% pull(variable)
+# analysis_data_final <- analysis_data %>% select(all_of(variables_to_keep))
+# cat("Remained variables (< 20% missing data):", length(variables_to_keep), "/", ncol(analysis_data), "\n")
 
 
 #### Final Data Export ####
