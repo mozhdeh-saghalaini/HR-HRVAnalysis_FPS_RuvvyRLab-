@@ -1,4 +1,6 @@
-# Last Update: 11/16/2025
+##### Last Update: 11/16/2025 ####
+# Authored by Mozhdeh Saghalaini: m.saghalaini@gmail.com
+
 # Some of the notes are for double checking and some are for me to remmeber stuff
 # This code integrats data wrangling, cleaning, and merging
 # It processes the raw MindWare files and merges them with subjective questionnaire data 

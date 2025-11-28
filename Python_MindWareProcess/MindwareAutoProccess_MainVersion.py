@@ -51,18 +51,43 @@ output_folder = r"C:\Users\user\Downloads\ECG-60-Hz-Noise"
 # ).strip()
 
 segment_time = int(input("Enter segment time in seconds (default 60): ") or 60)
-lf_filter = float(input("Enter LF filter value (default 0.15 Hz): ") or 0.15)
-hf_filter = float(input("Enter HF filter value (default 0.15 Hz): ") or 0.15)
 max_number_of_seg = int(input("Enter The Maximum Number of Segments in Each File (default 20): ") or 20)
+
+# Filter options
+print("\nSelect age group for HRV filter bands:")
+print("1 = Youth (7–17 years) - LF: 0.04–0.15 Hz, HF: 0.15–0.40 Hz")
+print("2 = Adults (MindWare default) - LF: 0.04–0.12 Hz, HF: 0.12–1.00 Hz")
+print("3 = Children & Infants (≤4 years) - LF: 0.04–0.24 Hz, HF: 0.24–1.04 Hz")
+
+age_choice = input("Enter choice (1/2/3): ").strip()
+
+if age_choice == "1":
+    lf_low, lf_high = 0.04, 0.15
+    hf_low, hf_high = 0.15, 0.40
+    group = "Youth (7–17 years)"
+elif age_choice == "2":
+    lf_low, lf_high = 0.04, 0.12
+    hf_low, hf_high = 0.12, 1.00
+    group = "Adults"
+elif age_choice == "3":
+    lf_low, lf_high = 0.04, 0.24
+    hf_low, hf_high = 0.24, 1.04
+    group = "Children & Infants (≤4 years)"
+else:
+    print("Invalid choice, defaulting to Adults.")
+    lf_low, lf_high = 0.04, 0.12
+    hf_low, hf_high = 0.12, 1.00
+    group = "Adults"
 
 print("\n Settings chosen:")
 print(f"MindWare path: {mindware_path}")
 print(f"Acquisition folder: {acq_folder}")
 print(f"Output folder: {output_folder}")
 print(f"Segment time: {segment_time}")
-print(f"LF filter: {lf_filter}")
-print(f"HF filter: {hf_filter}")
 print(f"Maximum Number of Segments: {max_number_of_seg}")
+print(f"Age group: {group}")
+print(f"LF band: {lf_low}–{lf_high} Hz")
+print(f"HF band: {hf_low}–{hf_high} Hz")
 
 # %% ---------------------------------------------------------
 # Utility functions 
@@ -297,18 +322,25 @@ for acq_file_name in files:
 
     safe_action(wait_and_click, "lf_field.png")
     pyautogui.doubleClick()
-    type_text(str(lf_filter))
+    type_text(str(lf_high))
     pyautogui.press('enter')
-    print(f"Set LF Band filter to {lf_filter} Hz")
+    print(f"Set LF upper Band filter to {lf_high} Hz")
     time.sleep(5)
 
     safe_action(wait_and_click, "hf_field.png")
     pyautogui.doubleClick()
-    type_text(str(hf_filter))
+    type_text(str(hf_low))
     pyautogui.press('enter')
-    print(f"Set HF/RSA Band filter to {hf_filter} Hz")
+    print(f"Set HF/RSA lower Band filter to {hf_low} Hz")
     time.sleep(5)
 
+    safe_action(wait_and_click, "hf_field2.png")
+    pyautogui.doubleClick()
+    type_text(str(hf_high))
+    pyautogui.press('enter')
+    print(f"Set HF/RSA upper Band filter to {hf_high} Hz")
+    time.sleep(5)
+    
     # R peak and additional setting tabs 
     safe_action(wait_and_click, "rpeak_tab.png")
     time.sleep(1)
