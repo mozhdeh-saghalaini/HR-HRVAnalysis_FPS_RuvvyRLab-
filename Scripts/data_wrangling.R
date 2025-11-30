@@ -321,33 +321,59 @@ if(nrow(hrv_raw) > 0) {
 
 cat("\n=== Merging with subjective Data ===\n")
 
-# Loading the subjective data !!!! I assumed the name of the file is "subjective_data.xlsx" but I hsould check and refine this as needed)
+# Loading the subjective data !!!! I assumed the name of the file is "subjective_data.xlsx" and it's adjusted based on the Empty Subjective Vars and ... files 
 subjective_data <- read_excel("D:/Research/FPS (Ruvvy RLab)/Codes/RawData/subjective_data.xlsx") %>%
   clean_names() %>%
-  # Selecting subjective variables
-  select(
-    id,
-    trauma_exposure = htq_total,           # Harvard Trauma Questionnaire total
-    ptsd_total = ucla_total,               # UCLA PTSD Reaction Index total
-    anxiety_total = scared_total,          # SCARED total score
-    ucla_irritable,                        # Irritability/anger item
-    ucla_concentrate,                      # Concentration problems item  
-    ucla_sleep,                            # Sleep difficulties item
-    ucla_danger,                           # Hypervigilance/danger item
-    pds_total,                             # Pubertal Development Scale
-    age
-  )
+
+    select(
+    id = sid,                        # For combining subjective and objevtive data of each participant
+    
+    age_subjective = age_at_visit,   # For verification
+    sex_subjective = sex,            # For verification
+    
+    trauma_exposure = htq,           # Harvard Trauma Questionnaire
+    ptsd_total = ucla,               # UCLA PTSD total
+    anxiety_total = scared,          # SCARED total
+    
+    # UCLA subscales
+    ucla_intrusion = ucla_clusterb,
+    ucla_avoidance = ucla_clusterc,
+    ucla_cog_alternations = ucla_clusterd,
+    ucla_arousal_react = ucla_clustere,
+    ucla_dissociative = ucla_dissociative,
+    
+    # Anxiety subscales
+    scared_panic_somatic,                 
+    scared_gad,                      # Generalized anxiety  
+    scared_social_anxiety,   
+    scared_separation_anxiety, 
+    scared_school_avoidance,
+    
+    # Trauma-related variables
+    death_threats, 
+    victimization, 
+    accident_injury, 
+    cumulative_lec,
+    
+    # Developmental 
+    pds_total                        # There is no PDS variable in the Empty file Dr. Grasser sent!!!!! check this
+    
+)
 
 # Merging
 analysis_data <- hrv_clean %>%
   left_join(subjevtive_data, by = "id") %>%
-    mutate(
+  
+  # verification to ensure datasets are correclty merged
+  mutate(
     sex = as.factor(sex),
     task_type = as.factor(task_type),
-    hyperarousal_score = ucla_irritable + ucla_concentrate + ucla_sleep + ucla_danger,
-    # Ensuring key variables' format
-    across(c(age, pds_total, trauma_exposure, ptsd_total, anxiety_total), as.numeric)
+    age_match = ifelse(age == age_subjective, TRUE, FALSE),
+    sex_match = ifelse(sex == sex_subjective, TRUE, FALSE)
   )
+cat("Age mismatches:", sum(!analysis_data$age_match, na.rm = TRUE), "\n")
+cat("Sex mismatches:", sum(!analysis_data$sex_match, na.rm = TRUE), "\n")
+
 
 
 #### Missing data Handling (Multiple Imputation based on the base code that Dr. Grasser sent me for missing data analysis)####
@@ -358,7 +384,7 @@ cat("\n=== Missing Data ===\n")
 imputation_vars <- analysis_data %>% 
   select(id, sex, task_type, age, pds_total,
          overall_mean_hr_mean, overall_rmssd_mean, overall_sdnn_mean,
-         trauma_exposure, ptsd_total, anxiety_total, hyperarousal_score)
+         trauma_exposure, ptsd_total, anxiety_total, ucla_arousal_react)
 
 # Checking missingness patterns 
 missing_summary <- imputation_vars %>%
