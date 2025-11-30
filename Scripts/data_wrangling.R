@@ -1,25 +1,20 @@
-##### Last Update: 11/16/2025 ####
+##### Last Update: 11/30/2025 ####
+
 # Authored by Mozhdeh Saghalaini: m.saghalaini@gmail.com
+# ------------------------------------------------------------------------------
+# ECG Data Wrangling and Processing
 
+## Description:
+# This code processes raw MindWare ECG files from the FPS paradigm
+# Extracts HRV metrics from "HRV Stats" sheet 
+# Each participant will have separate rows for ACQ and EXT tasks (two rows for each participant)
 
-## warning: the current output will allocate separate rows for EXT and ACQ of the same partcipant
-## - consult this with Dr. Grasser, whether it's better to combine EXT/ACQ files of the same 
-## participant in one row or this version is fine
+## Input:
+# MindWare outputs (.xlsx) listed in the MindWare_Files folder
 
-# Some of the notes are for double checking and some are for me to remmeber stuff
-# This code integrats data wrangling, cleaning, and merging
-# It processes the raw MindWare files and merges them with subjective questionnaire data 
-# and extracts HRV metrics from the "HRV Stats" sheet, calculates overall averages, and performs quality checks based on the word that Dr. Grasser sent me. 
-# methodology (MAD outlier detection, missing data handling), and creates a final analysis-ready dataset. 
-# The output is a clean dataset with both subjective and objective variables.
-
-# Outputs:
-# 1. Cleaned_ECG_Data.csv - processed HR/HRV metrics with quality indicators
-# 2. Final_Analysis_Dataset.csv - merged ECG + questionnare data 
-# 3. Data_Codebook.csv - Documentation of all variables and their meanings
-
-# This code handles multiple participants and segments,
-# includes robust data quality checks (outliers, missing data, physiological plausibility),
+## Output:
+# Cleaned_ECG_Data.csv - processed HR/HRV metrics with quality indicators
+# ------------------------------------------------------------------------------
 
 ##### Loading Packages #####
 
@@ -29,10 +24,7 @@ library(purrr)     # functional programming
 library(stringr)   # String manipulation
 library(lubridate) # Data handling
 library(janitor)   # data cleaning process
-library(robust)    # Robust outlier detection
-library(naniar)    # For missing data visualization
-library(mice)      # For multiple imputation
-library(finalfit)  # For missing data tests
+library(robustbase)# Robust outlier detection
 
 
 #### Function: Reading Mindware Files #### 
@@ -307,6 +299,12 @@ if(nrow(hrv_raw) > 0) {
   cat("Average usable segments:", round(quality_summary$avg_usable_segments, 1), "\n")
   cat("High quality files (≥ 80% usable):", round(quality_summary$pct_high_quality, 1), "%\n")
   
+  # Task distribution
+  task_distribution <- hrv_clean %>%
+    count(task_type)
+  cat("Task distribution:\n")
+  print(task_distribution)
+  
   # Saving cleaned data
   write_csv(hrv_clean, "D:/Research/FPS (Ruvvy RLab)/Codes/Output/Cleaned_ECG_Data.csv")
   cat("Cleaned data saved: Cleaned_ECG_Data.csv\n")
@@ -315,179 +313,5 @@ if(nrow(hrv_raw) > 0) {
   cat("No data processed \n")
   stop("Processing failed - no data available")
 }
-
-
-#### Merging with subjective Data ####
-
-cat("\n=== Merging with subjective Data ===\n")
-
-# Loading the subjective data !!!! I assumed the name of the file is "subjective_data.xlsx" and it's adjusted based on the Empty Subjective Vars and ... files 
-subjective_data <- read_excel("D:/Research/FPS (Ruvvy RLab)/Codes/RawData/subjective_data.xlsx") %>%
-  clean_names() %>%
-
-    select(
-    id = sid,                        # For combining subjective and objevtive data of each participant
-    
-    age_subjective = age_at_visit,   # For verification
-    sex_subjective = sex,            # For verification
-    
-    trauma_exposure = htq,           # Harvard Trauma Questionnaire
-    ptsd_total = ucla,               # UCLA PTSD total
-    anxiety_total = scared,          # SCARED total
-    
-    # UCLA subscales
-    ucla_intrusion = ucla_clusterb,
-    ucla_avoidance = ucla_clusterc,
-    ucla_cog_alternations = ucla_clusterd,
-    ucla_arousal_react = ucla_clustere,
-    ucla_dissociative = ucla_dissociative,
-    
-    # Anxiety subscales
-    scared_panic_somatic,                 
-    scared_gad,                      # Generalized anxiety  
-    scared_social_anxiety,   
-    scared_separation_anxiety, 
-    scared_school_avoidance,
-    
-    # Trauma-related variables
-    death_threats, 
-    victimization, 
-    accident_injury, 
-    cumulative_lec,
-    
-    # Developmental 
-    pds_total                        # There is no PDS variable in the Empty file Dr. Grasser sent!!!!! check this
-    
-)
-
-# Merging
-analysis_data <- hrv_clean %>%
-  left_join(subjevtive_data, by = "id") %>%
-  
-  # verification to ensure datasets are correclty merged
-  mutate(
-    sex = as.factor(sex),
-    task_type = as.factor(task_type),
-    age_match = ifelse(age == age_subjective, TRUE, FALSE),
-    sex_match = ifelse(sex == sex_subjective, TRUE, FALSE)
-  )
-cat("Age mismatches:", sum(!analysis_data$age_match, na.rm = TRUE), "\n")
-cat("Sex mismatches:", sum(!analysis_data$sex_match, na.rm = TRUE), "\n")
-
-
-
-#### Missing data Handling (Multiple Imputation based on the base code that Dr. Grasser sent me for missing data analysis)####
-
-cat("\n=== Missing Data ===\n")
-
-# Selecting key variables for imputation 
-imputation_vars <- analysis_data %>% 
-  select(id, sex, task_type, age, pds_total,
-         overall_mean_hr_mean, overall_rmssd_mean, overall_sdnn_mean,
-         trauma_exposure, ptsd_total, anxiety_total, ucla_arousal_react)
-
-# Checking missingness patterns 
-missing_summary <- imputation_vars %>%
-  summarise(across(everything(), ~sum(is.na(.))/n()*100)) %>%
-  pivot_longer(everything(), names_to = "variable", values_to = "pct_missing") %>%
-  arrange(desc(pct_missing))
-
-print(missing_summary)
-
-## Testing to see if data is Missing Completely at Random (MCAR)
-# Removing ID column for MCAR test 
-mcar_data <- imputation_vars %>% select(-id)
-
-mcar_result <- mcar_test(mcar_data)
-cat("MCAR test p-value:", mcar_result$p.value, "\n")
-
-if(mcar_result$p.value < 0.05) {
-  cat("May not be missing completely at random (p =", round(mcar_result$p.value, 3), ")\n")
-} else {
-  cat("Seems to be missing completely at random (p =", round(mcar_result$p.value, 3), ")\n")
-}
-
-# checking to see if missingness relates to other variables
-explanatory <- c("sex", "age") 
-dependent <- c("overall_rmssd_mean", "ptsd_total", "anxiety_total") 
-
-# Plot
-imputation_vars %>% 
-  missing_pairs(dependent, explanatory)
-
-# Multiple Imputation
-# remove ID, convert factors
-impute_ready <- imputation_vars %>%
-  select(-id) %>%
-  mutate(sex = as.factor(sex),
-         task_type = as.factor(task_type))
-
-imputed_data <- mice(impute_ready, 
-                     m = 5,           # Create 5 imputed datasets
-                     maxit = 10,      # 10 iterations
-                     method = 'pmm',  # Predictive Mean Matching
-                     seed = 123)      # For reproducibility
-
-# Plot to see if imputed values match real data distribution
-densityplot(imputed_data)
-
-# Using the first imputed dataset for your main analysis
-analysis_data_final <- complete(imputed_data, 1) %>% 
-  bind_cols(imputation_vars %>% select(id)) %>% 
-  left_join(analysis_data %>% select(id, collection_date, source_file), by = "id")
-
-
-cat("Final dataset has", nrow(analysis_data_final), "rows.\n")
-
-
-
-
-# # Previous version: simply deleting variables with high % of missingness
-# # Applying missing data threshold
-# variables_to_keep <- missing_summary %>% filter(pct_missing < 0.20) %>% pull(variable)
-# analysis_data_final <- analysis_data %>% select(all_of(variables_to_keep))
-# cat("Remained variables (< 20% missing data):", length(variables_to_keep), "/", ncol(analysis_data), "\n")
-
-
-#### Final Data Export ####
-
-cat("\n=== Final Data Export ====\n")
-
-# Saving final analysis dataset
-write_csv(analysis_data_final, "D:/Research/FPS (Ruvvy RLab)/Codes/Output/Final_Analysis_Dataset.csv")
-
-# Creating codebook for documentation
-codebook <- data.frame(
-  Variable = names(analysis_data_final),
-  Description = c(
-    "Participant ID",
-    "Sex",
-    "Task type (AQ/EXT)", 
-    "Task version",
-    "Data collection date",
-    "Source filename",
-    "Mean HR across segments (bpm)",
-    "Mean RMSSD across segments (ms)",
-    "Mean SDNN across segments (ms)", 
-    "Percentage of usable segments",
-    "Number of usable segments",
-    "Total segments available",
-    "Trauma exposure count (HTQ)",
-    "PTSD symptom severity (UCLA)",
-    "Anxiety symptom severity (SCARED)",
-    "Hyperarousal symptoms (UCLA subscale)",
-    "Pubertal development score",
-    "Age"
-  )[1:length(names(analysis_data_final))]
-)
-
-write_csv(codebook, "D:/Research/FPS (Ruvvy RLab)/Codes/Output/Data_Codebook.csv")
-
-cat("Final analysis dataset saved: Final_Analysis_Dataset.csv\n")
-cat("Data codebook saved: Data_Codebook.csv\n")
-cat("Processing completed.\n")
-cat("\nDataset dimensions:", nrow(analysis_data_final), "rows ×", ncol(analysis_data_final), "columns\n")
-cat("Unique participants:", n_distinct(analysis_data_final$id), "\n")
-
 
 

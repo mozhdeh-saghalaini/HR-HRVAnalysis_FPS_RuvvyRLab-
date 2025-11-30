@@ -1,13 +1,22 @@
+##### Loading Packages #####
+
 library(tidyverse) # data manipulation and visualization
 library(readxl)    # Reading .xlsx files   
 library(purrr)     # functional programming
 library(stringr)   # String manipulation
 library(lubridate) # Data handling
 library(janitor)   # data cleaning process
-library(robust)    # Robust outlier detection
+library(robustbase)    # Robust outlier detection
 library(naniar)    # For missing data visualization
 library(mice)      # For multiple imputation
 library(finalfit)  # For missing data tests
+library(pwr)       # For power analysis
+
+# Outputs:
+# 2. Final_Analysis_Dataset.csv - merged ECG + questionnare data 
+# 3. Data_Codebook.csv - Documentation of all variables and their meanings
+
+
 segment_sheet_name <- "HRV Stats" 
 
 d <- read_excel("D:/Research/FPS (Ruvvy RLab)/Meeting Contents/meeting5-18Nov/Example MindWare Output File HRV.xlsx", sheet = segment_sheet_name)
