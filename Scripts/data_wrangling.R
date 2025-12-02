@@ -1,4 +1,4 @@
-##### Last Update: 11/30/2025 ####
+##### Last Update: 12/2/2025 ####
 
 # Authored by Mozhdeh Saghalaini: m.saghalaini@gmail.com
 # ------------------------------------------------------------------------------
@@ -236,7 +236,7 @@ if(nrow(hrv_raw) > 0) {
   cat("Files with missing IDs:", missing_ids, "\n")
   
   
-  #### Outlier detection using median absolute deviation ####
+  #### Outlier detection using median absolute deviation (MAD) ####
   
   detect_physiological_outliers <- function(data) {
 
@@ -264,20 +264,29 @@ if(nrow(hrv_raw) > 0) {
   
   #### Selecting key variables ####
   
-  hrv_clean <- hrv_raw %>% select(
-      # metadata 
-      id, sex, task_type, task_version, collection_date, source_file,
-      # overall summary metrics (for primary analysis, I should double check the metrics' labels)
-      overall_mean_hr_mean, overall_rmssd_mean, overall_sdnn_mean,
-      # data quality indicators
-      pct_usable_segments, total_usable_segments, n_segments
-    ) %>%
-    # Removing rows with missing key metrics and IDs
+  # This approach drops only number of segemnts and the rest of the variables are remained:
+  hrv_clean <- hrv_raw %>%
+    select(-n_segments) %>% 
     filter(!if_all(c(overall_mean_hr_mean, overall_rmssd_mean), is.na)) %>%
     filter(!is.na(id)) %>%
-    # Physiological plausibility range
-    filter(overall_mean_hr_mean >= 40 & overall_mean_hr_mean <= 180,  
-           overall_rmssd_mean >= 10 & overall_rmssd_mean <= 200)      
+    filter(overall_mean_hr_mean >= 40 & overall_mean_hr_mean <= 180,
+           overall_rmssd_mean >= 10 & overall_rmssd_mean <= 200)
+  
+  # This one selects only a few of variables:
+  # hrv_clean <- hrv_raw %>% select(
+  #     # metadata 
+  #     id, sex, task_type, task_version, collection_date, source_file,
+  #     # overall summary metrics (for primary analysis, I should double check the metrics' labels)
+  #     overall_mean_hr_mean, overall_rmssd_mean, overall_sdnn_mean,
+  #     # data quality indicators
+  #     pct_usable_segments, total_usable_segments, n_segments
+  #   ) %>%
+  #   # Removing rows with missing key metrics and IDs
+  #   filter(!if_all(c(overall_mean_hr_mean, overall_rmssd_mean), is.na)) %>%
+  #   filter(!is.na(id)) %>%
+  #   # Physiological plausibility range
+  #   filter(overall_mean_hr_mean >= 40 & overall_mean_hr_mean <= 180,  
+  #          overall_rmssd_mean >= 10 & overall_rmssd_mean <= 200)      
   
   
   #### Data quality summary####

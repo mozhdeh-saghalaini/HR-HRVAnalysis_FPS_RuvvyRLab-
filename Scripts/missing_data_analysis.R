@@ -1,4 +1,4 @@
-##### Last Update: 11/30/2025 ####
+##### Last Update: 12/2/2025 ####
 
 # Authored by Mozhdeh Saghalaini: m.saghalaini@gmail.com
 # ------------------------------------------------------------------------------
@@ -30,13 +30,16 @@ analysis_data <- read_csv("D:/Research/FPS (Ruvvy RLab)/Codes/Output/Merged_Data
 
 #### Missing data analysis ####
 
-# Selecting key variables for imputation 
-imputation_vars <- analysis_data %>% 
-  select(id, sex, task_type, age_subjective, pds_total,
-         overall_mean_hr_mean, overall_rmssd_mean, overall_sdnn_mean,
-         trauma_exposure, ptsd_total, anxiety_total, ucla_arousal_react)
+# # Selecting key variables for imputation 
+# imputation_vars <- analysis_data %>% 
+#   select(id, sex, task_type, age_subjective, pds_total,
+#          overall_mean_hr_mean, overall_rmssd_mean, overall_sdnn_mean,
+#          trauma_exposure, ptsd_total, anxiety_total, ucla_arousal_react)
 
-#### Checking missingness patterns ####
+# Keeping all the variables for now
+imputation_vars <- analysis_data 
+
+#### Checking missingness patterns but plotting ####
 
 # checking to see if missingness relates to other variables
 explanatory <- c("sex", "age_subjective") 
@@ -80,8 +83,8 @@ impute_ready <- imputation_vars %>%
   )
 
 imputed_data <- mice(impute_ready, 
-                     m = 5,           # Create 5 imputed datasets
-                     maxit = 10,      # 10 iterations
+                     m = 5,           # Create 5 imputed datasets, I should adjust this based on our data missingness (5 is for low missginness like around 10 percent)
+                     maxit = 50,      # iterations
                      method = 'pmm',  # Predictive mean matching
                      seed = 123)    
 
@@ -115,24 +118,89 @@ write_csv(analysis_data_final, "D:/Research/FPS (Ruvvy RLab)/Codes/Output/Final_
 
 # Create codebook
 codebook <- data.frame(
-  Variable = names(analysis_data_final),
+  Variable = names(analysis_data),
   Description = c(
-    "Participant ID", "Sex", "Task type", "Age", "PDS total", 
-    "Mean HR", "Mean RMSSD", "Mean SDNN", "Trauma exposure", 
-    "PTSD total", "Anxiety total", "UCLA arousal",
-    "Collection date", "Source file", "% usable segments", 
-    "Usable segments count", "Total segments", "Task version"
+    # Metadata
+    "Participant ID",
+    "Sex (M/F)",
+    "Task type (AQ or EXT)",
+    "Task version (1 or 2)",
+    "Collection date",
+    "Source file name",
+    "Data sheet name",
+    
+    # Segment-level HRV metrics (example: seg1_mean_hr, seg2_mean_hr, …)
+    "Segment-level mean HR", 
+    "Segment-level RMSSD",
+    "Segment-level SDNN",
+    
+    # Overall summary metrics
+    "Overall mean HR across segments",
+    "SD of HR across segments",
+    "Overall mean RMSSD across segments",
+    "SD of RMSSD across segments",
+    "Overall mean SDNN across segments",
+    "SD of SDNN across segments",
+    
+    # Phasic metrics (baseline, early, late, reactivity indices)
+    "Baseline HR",
+    "Early task HR",
+    "Late task HR",
+    "Change in HR (late - early)",
+    "Early HR reactivity (early - baseline)",
+    "Late HR reactivity (late - baseline)",
+    
+    "Baseline RMSSD",
+    "Early task RMSSD",
+    "Late task RMSSD",
+    "Change in RMSSD (late - early)",
+    "Early RMSSD reactivity (early - baseline)",
+    "Late RMSSD reactivity (late - baseline)",
+    
+    "Baseline SDNN",
+    "Early task SDNN",
+    "Late task SDNN",
+    "Change in SDNN (late - early)",
+    "Early SDNN reactivity (early - baseline)",
+    "Late SDNN reactivity (late - baseline)",
+    
+    # Quality indicators
+    "% usable segments (HR)",
+    "Total usable segments (HR)",
+    
+    # Subjective questionnaire variables
+    "Sex from subjective data",
+    "Trauma exposure (HTQ)",
+    "PTSD total (UCLA)",
+    "Anxiety total (SCARED)",
+    "UCLA intrusion subscale",
+    "UCLA avoidance subscale",
+    "UCLA cognitive alterations subscale",
+    "UCLA arousal/reactivity subscale",
+    "UCLA dissociative subscale",
+    "SCARED panic/somatic subscale",
+    "SCARED generalized anxiety subscale",
+    "SCARED social anxiety subscale",
+    "SCARED separation anxiety subscale",
+    "SCARED school avoidance subscale",
+    "Trauma: death threats",
+    "Trauma: victimization",
+    "Trauma: accident/injury",
+    "Cumulative LEC score",
+    "Developmental stage (PDS total)",
+    
+    # Verification
+    "Sex match flag (objective vs subjective)"
   ),
-  
-  Type = sapply(analysis_data_final, class),
+  Type = sapply(analysis_data, class),
   stringsAsFactors = FALSE
 )
 
-
 write_csv(codebook, "D:/Research/FPS (Ruvvy RLab)/Codes/Output/Data_Codebook.csv")
+cat("Codebook saved: Data_Codebook.csv\n")
+
 
 cat("Final analysis dataset saved: Final_Analysis_Dataset.csv\n")
-cat("Data codebook saved: Data_Codebook.csv\n")
 
 cat("\nDataset dimensions:", nrow(analysis_data_final), "rows ×", ncol(analysis_data_final), "columns\n")
 cat("Unique participants:", n_distinct(analysis_data_final$id), "\n")

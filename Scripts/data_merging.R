@@ -46,7 +46,7 @@ subjective_data <- read_excel("D:/Research/FPS (Ruvvy RLab)/Codes/RawData/subjec
   select(
     id = sid,                        # For combining subjective and objevtive data of each participant
     
-    age_subjective = age_at_visit,   # For verification
+    # age_subjective = age_at_visit,   # For verification
     sex_subjective = sex,            # For verification
     
     trauma_exposure = htq,           # Harvard Trauma Questionnaire
